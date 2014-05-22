@@ -49,6 +49,19 @@ Use https://github.com/mpeltonen/sbt-idea
 
 Then delete the modules root, root-build and slick-build in IntelliJ. That makes syntax highlighting and cross-referencing work pretty well. Build doesn't work in IntelliJ. Use sbt instead.
 
+Netbeans IDE
+_______________
+Use https://github.com/dcaoyuan/nbscala or read http://wiki.netbeans.org/Scala 
+(Do not forget to check the documentation under https://github.com/dcaoyuan/nbscala#sbt-integration) 
+
+Then run the following on sbt console:
+
+.. parsed-literal::
+  sbt> compile
+  sbt> netbeans
+
+Open the sbt project in Netbeans... 
+You should have syntax highlighting,  compile-on-save, inbuilt sbt-console, interactive console, instant rename, error highlighting, code completion, formatting and indentation etc.
 
 Slick TestKit
 ---------------
