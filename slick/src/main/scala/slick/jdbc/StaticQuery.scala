@@ -72,8 +72,13 @@ object ActionBasedSQLInterpolation {
           _.getMetaData match {
             case null => Vector()
             case resultMeta => Vector.tabulate(resultMeta.getColumnCount) { i =>
-              val modelBuilder = dc.driver.createModelBuilder(Nil, true)(scala.concurrent.ExecutionContext.global)
-              modelBuilder.jdbcTypeToScala(resultMeta.getColumnType(i + 1), resultMeta.getColumnTypeName(i + 1))
+              //val modelBuilder = dc.driver.createModelBuilder(Nil, true)(scala.concurrent.ExecutionContext.global)
+              val jdbcType = dc.driver.columnTypes.allTypes.getOrElse(
+                resultMeta.getColumnType(i + 1),
+                dc.driver.columnTypes.stringJdbcType //FIXME
+              )
+              jdbcType.classTag
+              //modelBuilder.jdbcTypeToScala(resultMeta.getColumnType(i + 1), resultMeta.getColumnTypeName(i + 1))
             }
           }
         }

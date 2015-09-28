@@ -113,6 +113,27 @@ trait JdbcTypesComponent extends RelationalTypesComponent { driver: JdbcDriver =
     val bigDecimalJdbcType = new BigDecimalJdbcType
     val nullJdbcType = new NullJdbcType
 
+    private[slick] lazy val allTypes: Map[Int, JdbcType[_]] = Seq(
+        booleanJdbcType,
+        blobJdbcType,
+        byteJdbcType,
+        byteArrayJdbcType,
+        charJdbcType,
+        clobJdbcType,
+        dateJdbcType,
+        doubleJdbcType,
+        floatJdbcType,
+        intJdbcType,
+        longJdbcType,
+        shortJdbcType,
+        stringJdbcType,
+        timeJdbcType,
+        timestampJdbcType,
+        uuidJdbcType,
+        bigDecimalJdbcType,
+        nullJdbcType
+      ).map(x => (x.sqlType, x)).toMap
+
     class BooleanJdbcType extends DriverJdbcType[Boolean] {
       def sqlType = java.sql.Types.BOOLEAN
       def setValue(v: Boolean, p: PreparedStatement, idx: Int) = p.setBoolean(idx, v)
