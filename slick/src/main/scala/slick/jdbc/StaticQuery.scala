@@ -17,6 +17,7 @@ import java.sql.PreparedStatement
 
 import slick.SlickException
 import slick.backend.{DatabaseConfig, StaticDatabaseConfigMacros, StaticDatabaseConfig}
+import slick.collection.heterogeneous._
 import slick.dbio.{NoStream, Effect}
 import slick.driver.JdbcProfile
 import slick.profile.{SqlAction, SqlStreamingAction}
@@ -39,7 +40,7 @@ object ActionBasedSQLInterpolation {
     reify {
       SQLActionBuilder(
         ctxt.Expr[Seq[Any]]          (macroTreeBuilder.queryParts).splice,
-        ctxt.Expr[SetParameter[Unit]](macroTreeBuilder.pconvTree).splice
+        ctxt.Expr[PreparedStatement => Unit](macroTreeBuilder.pconvTree).splice
       )
     }
   }
@@ -50,7 +51,7 @@ object ActionBasedSQLInterpolation {
     reify {
       val res: SQLActionBuilder = SQLActionBuilder(
         ctxt.Expr[Seq[Any]]          (macroTreeBuilder.queryParts).splice,
-        ctxt.Expr[SetParameter[Unit]](macroTreeBuilder.pconvTree).splice
+        ctxt.Expr[PreparedStatement => Unit](macroTreeBuilder.pconvTree).splice
       )
       res.asUpdate
     }
@@ -90,14 +91,14 @@ object ActionBasedSQLInterpolation {
       val rconv = ctxt.Expr[GetResult[Any]](macroTreeBuilder.rconvTree(rTypes)).splice
       val res: SQLActionBuilder = SQLActionBuilder(
         ctxt.Expr[Seq[Any]]          (macroTreeBuilder.queryParts).splice,
-        ctxt.Expr[SetParameter[Unit]](macroTreeBuilder.pconvTree).splice
+        ctxt.Expr[PreparedStatement => Unit](macroTreeBuilder.pconvTree).splice
       )
       res.as(rconv)
     }
   }
 }
 
-case class SQLActionBuilder(queryParts: Seq[Any], unitPConv: SetParameter[Unit]) {
+case class SQLActionBuilder(queryParts: Seq[Any], setParams: PreparedStatement => Unit) {
   def as[R](implicit rconv: GetResult[R]): SqlStreamingAction[Vector[R], R, Effect] = {
     val query =
       if(queryParts.length == 1 && queryParts(0).isInstanceOf[String]) queryParts(0).asInstanceOf[String]
@@ -106,7 +107,7 @@ case class SQLActionBuilder(queryParts: Seq[Any], unitPConv: SetParameter[Unit])
       def statements = List(query)
       protected[this] def createInvoker(statements: Iterable[String]) = new StatementInvoker[R] {
         val getStatement = statements.head
-        protected def setParam(st: PreparedStatement) = unitPConv((), new PositionedParameters(st))
+        protected def setParam(st: PreparedStatement) = setParams(st)
         protected def extractValue(rs: PositionedResult): R = rconv(rs)
       }
       protected[this] def createBuilder = Vector.newBuilder[R]

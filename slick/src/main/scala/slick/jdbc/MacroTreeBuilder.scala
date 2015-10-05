@@ -50,7 +50,9 @@ private[jdbc] class MacroTreeBuilder[C <: Context](val c: C)(paramsList: List[C#
   //Some commonly used trees that are created on demand
   lazy val GetResultTypeTree = createClassTreeFromString("slick.jdbc.GetResult", newTypeName(_))
   lazy val SetParameterTypeTree = createClassTreeFromString("slick.jdbc.SetParameter", newTypeName(_))
-  lazy val TypedStaticQueryTypeTree = createClassTreeFromString("slick.jdbc.TypedStaticQuery", newTypeName(_))
+  //lazy val TypedStaticQueryTypeTree = createClassTreeFromString("slick.jdbc.TypedStaticQuery", newTypeName(_))
+  lazy val PreparedStatementTypeTree = createClassTreeFromString("java.sql.PreparedStatement", newTypeName(_))
+  lazy val JdbcTypeTypeTree = createClassTreeFromString("slick.jdbc.JdbcType", newTypeName(_))
   lazy val GetResultTree = createClassTreeFromString("slick.jdbc.GetResult", newTermName(_))
   lazy val SetParameterTree = createClassTreeFromString("slick.jdbc.SetParameter", newTermName(_))
   lazy val ImplicitlyTree = createClassTreeFromString("scala.Predef.implicitly", newTermName(_))
@@ -142,51 +144,45 @@ private[jdbc] class MacroTreeBuilder[C <: Context](val c: C)(paramsList: List[C#
       case Nil => Nil
     }
 
+    def createPconvFunction(stmts: List[Tree]) = Function(
+      List(
+        ValDef(Modifiers(Flag.PARAM), newTermName("st"), PreparedStatementTypeTree, EmptyTree)
+      ),
+      Block(
+        Import(
+          createClassTreeFromString("slick.driver.H2Driver.api", newTermName(_)),
+          List(ImportSelector(nme.WILDCARD, 9002, null, -1))
+        ) :: stmts,
+        Literal(Constant(()))
+      )
+    )
+
     if(rawQueryParts.length == 1)
-      (List(Literal(Constant(rawQueryParts.head))), Select(SetParameterTree, newTermName("SetUnit")))
+      (List(Literal(Constant(rawQueryParts.head))), createPconvFunction(Nil))
     else {
       val queryString = new ListBuffer[Tree]
-      val remaining = new ListBuffer[c.Expr[SetParameter[Unit]]]
+      val remaining = new ListBuffer[Tree]
+      var index = 0
       paramsList.asInstanceOf[List[c.Expr[Any]]].iterator.zip(rawQueryParts.iterator).foreach { case (param, rawQueryPart) =>
         val (queryPart, append) = decode(rawQueryPart)
         queryString.append(Literal(Constant(queryPart)))
         if(append) queryString.append(param.tree)
         else {
           queryString.append(Literal(Constant("?")))
-          remaining += c.Expr[SetParameter[Unit]] {
-            Apply(
-              Select(
-                implicitTree(TypeTree(param.actualType), SetParameterTypeTree),
-                newTermName("applied")
-              ),
-              List(param.tree)
-            )
-          }
+          index = index + 1
+          remaining += Apply(
+            Select(
+              implicitTree(TypeTree(param.actualType.widen), JdbcTypeTypeTree),
+              newTermName("setValue")
+            ),
+            List(param.tree, Ident(newTermName("st")), Literal(Constant(index)))
+          )
         }
       }
       queryString.append(Literal(Constant(rawQueryParts.last)))
-      val pconv =
-        if(remaining.isEmpty) Select(SetParameterTree, newTermName("SetUnit"))
-        else Apply(
-          Select(SetParameterTree, newTermName("apply")),
-          List(
-            Function(
-              List(
-                ValDef(Modifiers(Flag.PARAM), newTermName("u"), TypeTree(), EmptyTree),
-                ValDef(Modifiers(Flag.PARAM), newTermName("pp"), TypeTree(), EmptyTree)
-              ),
-              Block(
-                remaining.toList map ( sp =>
-                  Apply(
-                    Select(sp.tree, newTermName("apply")),
-                    List(Ident(newTermName("u")), Ident(newTermName("pp")))
-                  )
-                ), Literal(Constant(()))
-              )
-            )
-          )
-        )
-      (fuse(queryString.result()), pconv)
+
+      val pconv = if(!remaining.isEmpty) remaining.toList else Nil
+      (fuse(queryString.result()), createPconvFunction(pconv))
     }
   }
 
@@ -198,5 +194,9 @@ private[jdbc] class MacroTreeBuilder[C <: Context](val c: C)(paramsList: List[C#
     case _ => c.abort(c.enclosingPosition, "Only constant strings may be used after '#$' in 'tsql' interpolation")
   }
 
-  lazy val pconvTree: Tree = interpolationResultParams._2
+  lazy val pconvTree: Tree = {
+    val tree = interpolationResultParams._2
+    c.echo(c.enclosingPosition, tree.toString)
+    tree
+  }
 }
