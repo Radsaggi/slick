@@ -45,10 +45,13 @@ class VerifyTypes(after: Option[Phase] = None) extends Phase {
     }
     compare(tree, retyped)
 
-    if(errors.nonEmpty)
+    if (errors.nonEmpty) {
+      println(errors)
+      logger.warn("Retyped Tree: ", retyped)
       throw new SlickTreeException(
-        after.map(p => "After "+p.name+": ").getOrElse("")+errors.size+" type errors found in "+nodeCount+" nodes:",
+        after.map(p => "After " + p.name + ": ").getOrElse("") + errors.size + " type errors found in " + nodeCount + " nodes:",
         tree, removeUnmarked = false, mark = (errors contains RefId(_)))
+    }
 
     tree
   }
