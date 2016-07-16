@@ -322,6 +322,61 @@ class JoinTest extends AsyncTest[RelationalTestDB] {
     )
   }
 
+  def testManyToManyJoinSort = {
+    class A(tag: Tag) extends Table[Int](tag, "a_manytomanyjoin") {
+      def id = column[Int]("id", O.PrimaryKey)
+      def * = id
+      def bs = cs.filter(_.aId === id).flatMap(_.b)
+    }
+
+    class B(tag: Tag) extends Table[(Int, Int)](tag, "b_manytomanyjoin") {
+      def id = column[Int]("id", O.PrimaryKey)
+      def dId = column[Int]("dId")
+      def * = (id, dId)
+      def as = cs.filter(_.bId === id).flatMap(_.a)
+      def d = foreignKey("d_fk", dId, ds)(_.id)
+    }
+
+    class C(tag: Tag) extends Table[(Int, Int)](tag, "c_manytomanyjoin") {
+      def aId = column[Int]("aId")
+      def bId = column[Int]("bId")
+      def * = (aId, bId)
+      def a = foreignKey("a_fk", aId, as)(_.id)
+      def b = foreignKey("b_fk", bId, bs)(_.id)
+    }
+
+    class D(tag: Tag) extends Table[Int](tag, "d_manytomanyjoin") {
+      def id = column[Int]("id", O.PrimaryKey)
+      def * = id
+    }
+
+    lazy val as = TableQuery[A]
+    lazy val bs = TableQuery[B]
+    lazy val cs = TableQuery[C]
+    lazy val ds = TableQuery[D]
+
+    def q1 = for {
+      a <- as
+      b <- a.bs.sortBy(_.id)
+    } yield (a, b.id)
+
+    def q2 = for {
+      a <- as
+      b <- a.bs
+      d <- b.d
+    } yield (a, b.id, d)
+
+    DBIO.seq(
+      (as.schema ++ bs.schema ++ cs.schema).create,
+      as ++= Seq(1),
+      bs ++= Seq((2, 3)),
+      cs ++= Seq((1,2)),
+      ds ++= Seq(3),
+      q1.result.named("q1") shouldYield Set((1, 2)),
+      q2.result.named("q2") shouldYield Set((1, 2, 3))
+    )
+  }
+
   def testDiscriminatorCheck = {
     class A(tag: Tag) extends Table[Int](tag, "a_joinfiltering") {
       def id = column[Int]("id")
