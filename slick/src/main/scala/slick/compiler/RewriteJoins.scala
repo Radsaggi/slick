@@ -37,7 +37,13 @@ class RewriteJoins extends Phase {
         case Ref(s) :@ tpe if s == s2 => ref2 :@ tpe
       }, bottomUp = true)
       val (j2, invalid) = hoistFilters(j)
-      val res = Bind(sn, j2, sel2.untypeReferences(invalid)).infer()
+      val (j3, m) = eliminateIllegalRefs(j2, Set.empty, sn)
+      val j4 = rearrangeJoinConditions(j3, Set.empty)
+      val sel3 = if(m.isEmpty) sel2 else sel2.replace {
+        case p @ FwdPath(r1 :: rest) if r1 == sn && m.contains(rest) => m(rest)
+        case r @ Ref(s) if (j4 ne j2) && s == sn => r.untyped // Structural expansion may have changed
+      }
+      val res = Bind(sn, j4, sel2.untypeReferences(invalid)).infer()
       logger.debug("Hoisted flatMapped Filter in:", Ellipsis(res, List(0, 0), List(0, 1)))
       flattenAliasingMap(res)
 
@@ -80,7 +86,13 @@ class RewriteJoins extends Phase {
         case Ref(s) :@ tpe if s == s2 => ref2 :@ tpe
       }
       val (j2, invalid) = hoistFilters(j)
-      val res = Bind(sn, j2, sel2.untypeReferences(invalid)).infer()
+      val (j3, m) = eliminateIllegalRefs(j2, Set.empty, sn)
+      val j4 = rearrangeJoinConditions(j3, Set.empty)
+      val sel3 = if(m.isEmpty) sel2 else sel2.replace {
+        case p @ FwdPath(r1 :: rest) if r1 == sn && m.contains(rest) => m(rest)
+        case r @ Ref(s) if (j4 ne j2) && s == sn => r.untyped // Structural expansion may have changed
+      }
+      val res = Bind(sn, j4, sel2.untypeReferences(invalid)).infer()
       logger.debug("Unnested Bind in:", Ellipsis(res, List(0, 0)))
       flattenAliasingMap(res)
 
@@ -116,7 +128,7 @@ class RewriteJoins extends Phase {
     else {
       val j2 = j.copy(left = l1, right = r1, on = and(p1Opt, and(p2Opt, j.on.untypeReferences(invalid)))).infer()
       logger.debug("Hoisting join filters from:", j)
-      logger.debug("Hoisted join filters in:", j2)
+      logger.debug(s"Hoisted join filters with InvalidSet(${invalid.mkString(",")}) in: ", j2)
       (j2, invalid)
     }
   }
@@ -192,7 +204,8 @@ class RewriteJoins extends Phase {
           val b2 = b.copy(select = Pure(sn2, ts)).infer()
           (b2, pulled.map { case (s, n) => (s :: Nil, n) })
         }
-      case n => (n, Map.empty)
+      case t: TableNode => (t, Map.empty)
+      case n => trChild(n, illegal, outsideRef)
     }
     val (l1, l1m) = trChild(j.left, illegal, j.leftGen)
     val (r1, r1m) = trChild(j.right, illegal + j.leftGen, j.rightGen)
