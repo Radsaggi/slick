@@ -16,10 +16,9 @@ private[jdbc] class MacroTreeBuilder[C <: Context](val c: C)(paramsList: List[C#
   lazy val rawQueryParts: List[String] = {
     //Deconstruct macro application to determine the passed string and the actual parameters
     val Apply(Select(Apply(_, List(Apply(_, strArg))), _), paramList) = c.macroApplication
-    val list = strArg map { str =>
+    strArg map { str =>
       evalString(str).getOrElse(abort("The interpolation contained something other than constants..."))
     }
-    list.init :+ (list.last + " ")
   }
 
   /**
